@@ -68,8 +68,9 @@ dependencies {
     provided rootProject.ext.dependencies["annotation"]
 
     //other
-//    compile rootProject.ext.dependencies["multidex"]
-//    compile rootProject.ext.dependencies["logger"]
+    compile rootProject.ext.dependencies["multidex"]
+    compile rootProject.ext.dependencies["logger"]
+//    compile rootProject.ext.dependencies["fragmentation"]
 //    compile rootProject.ext.dependencies["fragmentation"]
 //    compile rootProject.ext.dependencies["crashreport"]
 
