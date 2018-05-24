@@ -19,6 +19,9 @@ import com.example.administrator.merd.util.SystemUtil;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.CookieManager;
+import java.net.CookiePolicy;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import javax.inject.Singleton;
@@ -27,7 +30,12 @@ import dagger.Module;
 import dagger.Provides;
 import okhttp3.Cache;
 import okhttp3.CacheControl;
+import okhttp3.Cookie;
+import okhttp3.CookieJar;
+import okhttp3.Headers;
+import okhttp3.HttpUrl;
 import okhttp3.Interceptor;
+import okhttp3.JavaNetCookieJar;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -101,11 +109,13 @@ public class HttpModule {
     @Singleton
     @Provides
     OkHttpClient provideClient(OkHttpClient.Builder builder) {
+        //TODO Log信息拦截器
         if (BuildConfig.DEBUG) {
             HttpLoggingInterceptor loggingInterceptor = new HttpLoggingInterceptor();
             loggingInterceptor.setLevel(HttpLoggingInterceptor.Level.BASIC);
             builder.addInterceptor(loggingInterceptor);
         }
+        //TODO 缓存机制
         File cacheFile = new File(Constants.PATH_CACHE);
         Cache cache = new Cache(cacheFile, 1024 * 1024 * 50);
         Interceptor cacheInterceptor = new Interceptor() {
@@ -123,7 +133,7 @@ public class HttpModule {
                     // 有网络时, 不缓存, 最大保存时长为0
                     response.newBuilder()
                             .header("Cache-Control", "public, max-age=" + maxAge)
-                            .removeHeader("Pragma")
+                            .removeHeader("Pragma")// 清除头信息，因为服务器如果不支持，会返回一些干扰信息，不清除下面无法生效
                             .build();
                 } else {
                     // 无网络时，设置超时为4周
@@ -136,18 +146,47 @@ public class HttpModule {
                 return response;
             }
         };
-//        Interceptor apikey = new Interceptor() {
-//            @Override
-//            public Response intercept(Chain chain) throws IOException {
-//                Request request = chain.request();
-//                request = request.newBuilder()
-//                        .addHeader("apikey",Constants.KEY_API)
-//                        .build();
-//                return chain.proceed(request);
-//            }
-//        }
-//        设置统一的请求头部参数
-//        builder.addInterceptor(apikey);
+        //TODO 公共参数------------------------------------------------------------
+        Interceptor addQueryParameterInterceptor = new Interceptor() {
+            @Override
+            public Response intercept(Chain chain) throws IOException {
+                Request originalRequest = chain.request();
+                Request request;
+                String method = originalRequest.method();
+                Headers headers = originalRequest.headers();
+                HttpUrl modifiedUrl = originalRequest.url().newBuilder()
+                        //在这里提供自定义参数
+                        .addQueryParameter("platform", "android")
+                        .addQueryParameter("version", "1.0.0")
+                        .build();
+                request = originalRequest.newBuilder().url(modifiedUrl).build();
+                return chain.proceed(request);
+            }
+        };
+        //公共参数,设置统一的请求头部参数
+        builder.addInterceptor(addQueryParameterInterceptor);
+        //TODO 设置头------------------------------------------------------------
+        Interceptor headerInterceptor = new Interceptor() {
+            @Override
+            public Response intercept(Chain chain) throws IOException {
+                Request originalRequest = chain.request();
+                Request.Builder requestBuilder = originalRequest.newBuilder()
+                        .header("AppType", "TPOS")
+                        .header("Content-Type", "application/json")
+                        .header("Accept", "application/json")
+                        .method(originalRequest.method(), originalRequest.body());
+                Request request = requestBuilder.build();
+                return chain.proceed(request);
+            }
+        };
+        //设置头
+        builder.addInterceptor(headerInterceptor);
+        //TODO 设置cookie------------------------------------------------------------
+        CookieManager cookieManager = new CookieManager();
+        cookieManager.setCookiePolicy(CookiePolicy.ACCEPT_ALL);
+//        cookieManager.put(url, cookies);
+//        cookieManager.put(HttpUrl.parse("http://192.168.31.231:8080/shiro-2"), cookies);
+        builder.cookieJar(new JavaNetCookieJar(cookieManager));
         //设置缓存
         builder.addNetworkInterceptor(cacheInterceptor);
         builder.addInterceptor(cacheInterceptor);
